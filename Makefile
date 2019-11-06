@@ -13,6 +13,10 @@ build/vcf_line_splitter: $(OBJS)
 build/%.o: %.cc
 	g++ -c -o $@ $(CXXFLAGS) $^
 
+test: all
+	docker build -t vcf_line_splitter .
+	miniwdl run --verbose test.wdl
+
 clean:
 	rm -rf build
 
