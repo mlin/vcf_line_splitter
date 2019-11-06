@@ -118,6 +118,7 @@ void writer_thread(const string& dest_prefix, const int part_num, const string& 
             throw runtime_error("Error writing VCF data");
         }
         sz += it->size() + 1; ct++;
+        std::string().swap(*it);  // free memory asap
     }
 
     if (bgzf_close(ogz)) {

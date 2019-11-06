@@ -14,7 +14,7 @@ task vcf_line_splitter {
     command <<<
         set -euo pipefail
         mkdir parts
-        bgzip -dc@ 4 "~{vcf_gz}" | vcf_line_splitter -MB ~{partMB} -threads ~{cpu} "parts/~{parts_name}."
+        bgzip -dc@ 4 "~{vcf_gz}" | pv -abtfi 10 | vcf_line_splitter -MB ~{partMB} -threads ~{cpu} "parts/~{parts_name}."
     >>>
 
     output {
