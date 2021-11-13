@@ -16,6 +16,7 @@ header is repeated at the top of each part. The temporary filenames are written 
 #include <exception>
 #include <chrono>
 #include <unistd.h>
+#include <string.h>
 #include <gflags/gflags.h>
 #include <htslib/bgzf.h>
 
@@ -91,13 +92,14 @@ DEFINE_int32(MB, 0, "megabytes per part, before compression; overrides -lines");
 DEFINE_int32(threads, 1, "max compress+flush background threads");
 DEFINE_bool(part_column, false, "print an extra column with the part number on standard output");
 DEFINE_bool(quiet, false, "don't print any extra info to standard error");
+DEFINE_string(range, "", "chr:beg-end; include only lines with CHROM:POS within this inclusive range");
 
 // coordination globals
 mutex master_lock;
 int threads_launched, threads_completed, threads_active;
 std::condition_variable cv_thread_exit;
 double read_s, stall_s, write_s;
-size_t records_read, records_written, bytes_processed;
+size_t records_read, records_written, bytes_processed, records_skipped;
 
 // background thread to compress and write out a part
 void writer_thread(const string& dest_prefix, const int part_num, const string& header, unique_ptr<vector<string>> buf) {
@@ -159,8 +161,29 @@ bool part_finished(int lines, size_t bytes) {
                : (lines >= FLAGS_lines);
 }
 
+bool in_range(const string& line, string range_chrom, unsigned long long range_beg, unsigned long long range_end) {
+    if (range_chrom.empty()) {
+        return true;
+    }
+    auto p = line.find('\t');
+    if (p == range_chrom.size()) {
+        if (!strncmp(range_chrom.c_str(), line.c_str(), p)) {
+            auto p2 = line.find('\t', p+1);
+            if (p2 != string::npos && p2 > p+1) {
+                errno = 0;
+                auto pos = strtoull(line.substr(p+1, p2-p-1).c_str(), nullptr, 10);
+                if (errno == 0 && pos >= range_beg && pos <= range_end) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // read in and launch background processing of one part
-bool part(const string& dest_prefix, const int part_num, const string& header, linepeeker& input) {
+bool part(const string& dest_prefix, const int part_num, const string& header, linepeeker& input,
+          string range_chrom, unsigned long long range_beg, unsigned long long range_end) {
     unique_ptr<vector<string>> buf(new vector<string>);
     unsigned int lines = 0;
     size_t bytes = 0;
@@ -171,6 +194,10 @@ bool part(const string& dest_prefix, const int part_num, const string& header, l
     try {
         while (!part_finished(lines,bytes)) {
             string line = input.get();
+            if (!in_range(line, range_chrom, range_beg, range_end)) {
+                ++records_skipped;
+                continue;
+            }
             lines++; bytes += line.size() + 1;
             buf->push_back(move(line));
         }
@@ -211,6 +238,27 @@ Usage: bgzip -dc@ 4 | vcf_line_splitter -threads $(nproc) /destination/path/pref
         return 1;
     }
 
+    // parse --range if any
+    string range_chrom;
+    unsigned long long range_beg = -1, range_end = -1;
+    if (!FLAGS_range.empty()) {
+        errno = 0;
+        auto pc = FLAGS_range.find(':');
+        if (pc != string::npos && pc > 0) {
+            range_chrom = FLAGS_range.substr(0, pc);
+            auto pd = FLAGS_range.find('-', pc);
+            if (pd != string::npos && pd > pc+1) {
+                range_beg = strtoull(FLAGS_range.substr(pc+1, pd-pc-1).c_str(), nullptr, 10);
+                range_end = strtoull(FLAGS_range.substr(pd+1).c_str(), nullptr, 10);
+            }
+        }
+        if (range_chrom.empty() || range_beg <= 0 || range_end < range_beg || errno) {
+            cerr << "Unable to parse --range as chr:beg-end" << endl;
+            cerr.flush();
+            return -1;
+        }
+    }
+
     ios::sync_with_stdio(false); // cin performance is awful without this!
 
     string dest_prefix(argv[1]);
@@ -221,7 +269,7 @@ Usage: bgzip -dc@ 4 | vcf_line_splitter -threads $(nproc) /destination/path/pref
     records_read = records_written = bytes_processed = 0;
 
     int part_num = 0;
-    while(part(dest_prefix, part_num++, hdr, input));
+    while(part(dest_prefix, part_num++, hdr, input, range_chrom, range_beg, range_end));
 
     // wait for running threads
     unique_lock<mutex> lock(master_lock);
@@ -230,15 +278,18 @@ Usage: bgzip -dc@ 4 | vcf_line_splitter -threads $(nproc) /destination/path/pref
     }
 
     if (threads_launched != threads_completed || records_read != records_written) {
-        cerr << "BUG!!!";
+        cerr << "BUG!!!" << endl;
         cerr.flush();
         return -1;
     }
 
     if (!FLAGS_quiet) {
         cerr << "vcf_line_splitter wrote " << part_num << " parts with "
-             << records_read << " records and " << bytes_processed<< " uncompressed bytes"
-             << "; spent " << (int) read_s << "s reading and " << (int) write_s << "s writing"
+             << records_read << " records and " << bytes_processed<< " uncompressed bytes";
+        if (records_skipped) {
+            cerr << " (" << records_skipped << " records range-skipped)";
+        }
+        cerr << "; spent " << (int) read_s << "s reading and " << (int) write_s << "s writing"
              << ", " << (int) stall_s << "s stalled"
              << endl;
     }
