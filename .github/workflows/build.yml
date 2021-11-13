@@ -1,0 +1,22 @@
+name: build
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: build
+      run: |
+        pip3 install miniwdl
+        make test
+        docker run -v $(pwd):/mnt vcf_line_splitter cp /usr/local/bin/vcf_line_splitter /mnt
+    - name: inspect
+      run: |
+        ldd vcf_line_splitter
+        sha256sum vcf_line_splitter
+    - name: upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: vcf_line_splitter
+        path: vcf_line_splitter
