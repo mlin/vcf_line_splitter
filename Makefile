@@ -1,4 +1,4 @@
-ARCH ?= native
+ARCH ?= haswell
 OBJS = build/vcf_line_splitter.o
 CXXFLAGS = -Wall -std=c++14 -pthread -O3 -DNDEBUG -march=$(ARCH)
 LDFLAGS = -ljemalloc -lgflags -lhts -lpthread -march=$(ARCH)

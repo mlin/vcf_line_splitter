@@ -15,6 +15,7 @@ header is repeated at the top of each part. The temporary filenames are written 
 #include <condition_variable>
 #include <exception>
 #include <chrono>
+#include <unistd.h>
 #include <gflags/gflags.h>
 #include <htslib/bgzf.h>
 

@@ -93,7 +93,7 @@ task validate {
     }
 
     runtime {
-        docker: "ubuntu:19.04"
+        docker: "ubuntu:20.04"
         cpu: 8
     }
 }
