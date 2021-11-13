@@ -8,13 +8,14 @@ task vcf_line_splitter {
 
         Int cpu = 16
         String memory = "16G"
-        String docker = "quay.io/mlin/vcf_line_splitter"
+        String docker = "ghcr.io/mlin/vcf_line_splitter"
     }
 
     command <<<
         set -euo pipefail
         mkdir parts
-        bgzip -dc@ 4 "~{vcf_gz}" | pv -abtfi 10 | vcf_line_splitter -MB ~{partMB} -threads ~{cpu} "parts/~{parts_name}."
+        bgzip -dc@ 4 "~{vcf_gz}" | pv -abtfi 10 | \
+            vcf_line_splitter -MB ~{partMB} -threads ~{cpu} "parts/~{parts_name}."
     >>>
 
     output {
