@@ -2,6 +2,19 @@ name: build
 on: [push, pull_request]
 
 jobs:
+
+  lint:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: deps
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get install -y clang-format cppcheck python3-pip
+        sudo pip3 install --system pre-commit
+    - name: pre-commit
+      run: pre-commit run --all-files
+
   build:
     runs-on: ubuntu-20.04
     steps:
