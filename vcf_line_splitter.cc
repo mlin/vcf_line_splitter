@@ -38,7 +38,7 @@ class linepeeker {
 
     const string &peek() {
         if (!_full) {
-            // Preallocate buffer based on _last_size to reduce realloaction during getline
+            // Preallocate buffer based on _last_size to reduce reallocation during getline
             _next.reserve(_last_size * 5 / 4);
 
             // Read a line
@@ -269,6 +269,7 @@ Usage: bgzip -dc@ 4 | vcf_line_splitter -threads $(nproc) /destination/path/pref
     }
 
     ios::sync_with_stdio(false); // cin performance is awful without this!
+    cin.tie(nullptr);
 
     string dest_prefix(argv[1]);
     linepeeker input(cin);
